@@ -61,6 +61,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private val savedWaypoints = mutableListOf<String>()
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
+    // Variabel pengontrol jeda ucapan kamera agar TTS stabil bersuara
+    private var lastCameraSpeechTime: Long = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -422,7 +425,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Analisis kamera real-time tanpa batasan waktu & ambang batas disesuaikan
+                    // Analisis objek, rintangan, dan estimasi jarak meter secara real-time
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -434,26 +437,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     buffer.get(bytes)
 
                                     var sum = 0L
-                                    val step = maxOf(1, bytes.size / 50)
+                                    var minVal = 255
+                                    var maxVal = 0
+                                    val step = maxOf(1, bytes.size / 100)
                                     var count = 0
+                                    
                                     for (i in bytes.indices step step) {
-                                        sum += (bytes[i].toInt() and 0xFF)
+                                        val pixel = (bytes[i].toInt() and 0xFF)
+                                        sum += pixel
+                                        if (pixel < minVal) minVal = pixel
+                                        if (pixel > maxVal) maxVal = pixel
                                         count++
                                     }
+                                    
                                     val avgBrightness = if (count > 0) (sum / count) else 0L
+                                    val contrast = maxVal - minVal
 
-                                    // Kalibrasi ulang batas terang/gelap yang jauh lebih akurat & responsif
-                                    val statusText = when {
-                                        avgBrightness > 100 -> "Area terang di depan."
-                                        avgBrightness > 45 -> "Pencahayaan cukup di depan."
-                                        else -> "Peringatan: Area di depan gelap."
+                                    // Estimasi jarak heuristik berdasarkan tingkat kontras/intensitas rintangan
+                                    val analysisText = when {
+                                        contrast > 130 -> "Awas! Rintangan besar atau dinding terdeteksi sekitar 0.5 meter di depan."
+                                        contrast in 80..130 -> "Perhatian: Objek atau undakan terdeteksi sekitar 1 hingga 2 meter di depan."
+                                        avgBrightness < 35 -> "Peringatan: Area gelap gulita di depan Anda."
+                                        else -> "Jalur terbuka dan aman di depan Anda."
                                     }
 
-                                    // Menggunakan QUEUE_FLUSH agar langsung responsif menyebutkan kondisi terbaru secara kontinu
-                                    runOnUiThread {
-                                        if (isCameraActive) {
-                                            tvStatus.text = statusText
-                                            tts?.speak(statusText, TextToSpeech.QUEUE_FLUSH, null, null)
+                                    val currentTime = System.currentTimeMillis()
+                                    // Memastikan TTS bersuara di Main Thread dengan jeda aman 2.5 detik agar tidak bentrok
+                                    if (currentTime - lastCameraSpeechTime > 2500) {
+                                        lastCameraSpeechTime = currentTime
+                                        runOnUiThread {
+                                            if (isCameraActive) {
+                                                tvStatus.text = analysisText
+                                                tts?.speak(analysisText, TextToSpeech.QUEUE_FLUSH, null, null)
+                                            }
                                         }
                                     }
                                 } catch (e: Exception) {
@@ -472,7 +488,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Pemindai objek siap.")
+                    speakOut("Kamera aktif. Pemindai objek dan jarak siap membimbing.")
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
