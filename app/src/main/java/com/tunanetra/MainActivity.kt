@@ -18,6 +18,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
+import android.util.Size
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -140,7 +141,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 50))
-                    speakOut(lastSpokenText)
+                    speakOut(lastSpokenText, false)
                 }
             }
             box.addView(btnRepeat)
@@ -259,18 +260,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Toast.makeText(this, "Bahasa Indonesia tidak didukung.", Toast.LENGTH_SHORT).show()
             } else {
-                speakOut(lastSpokenText)
+                speakOut(lastSpokenText, false)
             }
         }
     }
 
-    private fun speakOut(text: String) {
+    private fun speakOut(text: String, isUrgent: Boolean) {
         lastSpokenText = text
         if (::tvStatus.isInitialized) {
             tvStatus.text = text
             tvStatus.contentDescription = text
         }
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+        val queueMode = if (isUrgent) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        tts?.speak(text, queueMode, null, null)
     }
 
     private fun vibratePattern(pattern: LongArray) {
@@ -294,7 +296,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             btnToggleTracking.text = "Mulai Pantau Jalan (STOP Nonaktif)"
             btnToggleTracking.setBackgroundColor(Color.parseColor("#C62828"))
             stopContinuousTracking()
-            speakOut("Pemantauan jalan dihentikan.")
+            speakOut("Pemantauan jalan dihentikan.", true)
         }
     }
 
@@ -308,17 +310,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
 
     private fun requestSingleLocation() {
         try {
-            speakOut("Mengecek posisi Anda...")
+            speakOut("Mengecek posisi Anda...", false)
             val location = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             if (location != null) {
                 processLocationAndSpeak(location, false)
             } else {
-                speakOut("GPS belum mendeteksi sinyal. Pastikan berada di area terbuka.")
+                speakOut("GPS belum mendeteksi sinyal. Pastikan berada di area terbuka.", true)
                 vibratePattern(longArrayOf(0, 300, 150, 300))
             }
         } catch (e: SecurityException) {
-            speakOut("Izin lokasi ditolak.")
+            speakOut("Izin lokasi ditolak.", true)
         }
     }
 
@@ -327,11 +329,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
         } else {
             try {
-                speakOut("Pemantauan jalan aktif.")
+                speakOut("Pemantauan jalan aktif.", true)
                 locationManager?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 4000L, 3f, this)
                 locationManager?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 3f, this)
             } catch (e: SecurityException) {
-                speakOut("Gagal mengakses GPS.")
+                speakOut("Gagal mengakses GPS.", true)
             }
         }
     }
@@ -352,7 +354,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         var addressDescription = "Koordinat $lat, $lon."
 
         if (location.hasAccuracy() && location.accuracy > 25f) {
-            speakOut("Peringatan: Sinyal GPS kurang akurat dengan radius ${location.accuracy.toInt()} meter.")
+            speakOut("Peringatan: Sinyal GPS kurang akurat dengan radius ${location.accuracy.toInt()} meter.", true)
             vibratePattern(longArrayOf(0, 200, 100, 200))
             return
         }
@@ -378,7 +380,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         } else {
             "Posisi Anda menghadap ke $clockDir ($compassDir). $addressDescription"
         }
-        speakOut(finalMessage)
+        speakOut(finalMessage, false)
     }
 
     private fun saveCustomWaypoint() {
@@ -388,13 +390,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             if (location != null) {
                 val waypointName = "Titik Acuan #${savedWaypoints.size + 1} (${location.latitude}, ${location.longitude})"
                 savedWaypoints.add(waypointName)
-                speakOut("Titik acuan mandiri berhasil disimpan.")
+                speakOut("Titik acuan mandiri berhasil disimpan.", true)
                 vibratePattern(longArrayOf(0, 150, 150, 150))
             } else {
-                speakOut("Gagal menyimpan waypoint, sinyal GPS belum ditemukan.")
+                speakOut("Gagal menyimpan waypoint, sinyal GPS belum ditemukan.", true)
             }
         } catch (e: SecurityException) {
-            speakOut("Izin lokasi diperlukan.")
+            speakOut("Izin lokasi diperlukan.", true)
         }
     }
 
@@ -422,7 +424,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                     btnCameraObstacle.setBackgroundColor(Color.parseColor("#424242"))
                 }.onFailure {
                     isCameraActive = false
-                    speakOut("Fitur kamera belum didukung di perangkat ini.")
+                    speakOut("Fitur kamera belum didukung di perangkat ini.", true)
                 }
             }
         } else {
@@ -430,7 +432,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             stopCameraPreview()
             btnCameraObstacle.text = "Aktifkan Deteksi Kamera"
             btnCameraObstacle.setBackgroundColor(Color.parseColor("#EF6C00"))
-            speakOut("Kamera pemindai dimatikan.")
+            speakOut("Kamera pemindai dimatikan.", true)
         }
     }
 
@@ -438,7 +440,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private fun startCameraPreview() {
         try {
             val options = ImageLabelerOptions.Builder()
-                .setConfidenceThreshold(0.65f)
+                .setConfidenceThreshold(0.60f) // Sedikit diturunkan agar lebih sensitif menangkap objek sekitar
                 .build()
             val imageLabeler = ImageLabeling.getClient(options)
 
@@ -451,7 +453,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
+                    // Mengoptimalkan ImageAnalysis dengan resolusi target 640x480 untuk performa maksimal & anti-lag
                     val imageAnalysis = ImageAnalysis.Builder()
+                        .setTargetResolution(Size(640, 480))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also { analysis ->
@@ -470,13 +474,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                             }
 
                                             val currentTime = System.currentTimeMillis()
-                                            if (currentTime - lastCameraSpeechTime > 3500) {
+                                            // Interval jeda suara dipercepat menjadi 2.5 detik agar interaktif
+                                            if (currentTime - lastCameraSpeechTime > 2500) {
                                                 lastCameraSpeechTime = currentTime
                                                 runOnUiThread {
                                                     if (isCameraActive) {
                                                         tvStatus.text = analysisText
                                                         tvStatus.contentDescription = analysisText
-                                                        tts?.speak(analysisText, TextToSpeech.QUEUE_ADD, null, null)
+                                                        // Menggunakan QUEUE_FLUSH agar suara objek saat ini langsung diucapkan (real-time)
+                                                        tts?.speak(analysisText, TextToSpeech.QUEUE_FLUSH, null, null)
                                                     }
                                                 }
                                             }
@@ -500,14 +506,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Pengenal nama objek siap.")
+                    speakOut("Kamera aktif. Pengenal nama objek siap.", true)
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
-                    speakOut("Gagal menghubungkan kamera.")
+                    speakOut("Gagal menghubungkan kamera.", true)
                 }
             }, ContextCompat.getMainExecutor(this))
         } catch (e: Exception) {
-            speakOut("Kamera tidak dapat dijalankan.")
+            speakOut("Kamera tidak dapat dijalankan.", true)
         }
     }
 
@@ -528,6 +534,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             "book" -> "buku"
             "laptop", "computer" -> "komputer atau laptop"
             "cell phone", "smartphone" -> "ponsel"
+            "vehicle", "car" -> "mobil"
+            "bicycle" -> "sepeda"
+            "motorcycle" -> "sepeda motor"
             else -> englishLabel
         }
     }
@@ -541,7 +550,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     }
 
     private fun startDestinationGuidance() {
-        speakOut("Fitur panduan rute diaktifkan. Silakan berjalan lurus mengikuti arah utara menuju tujuan.")
+        speakOut("Fitur panduan rute diaktifkan. Silakan berjalan lurus mengikuti arah utara menuju tujuan.", true)
         vibratePattern(longArrayOf(0, 100))
     }
 
@@ -552,13 +561,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             if (location != null) {
                 val hazardInfo = "Lubang di koordinat ${location.latitude}, ${location.longitude}"
                 reportedHazards.add(hazardInfo)
-                speakOut("Titik bahaya jalan berhasil disimpan.")
+                speakOut("Titik bahaya jalan berhasil disimpan.", true)
                 vibratePattern(longArrayOf(0, 300, 100, 300))
             } else {
-                speakOut("Gagal merekam posisi, pastikan GPS aktif.")
+                speakOut("Gagal merekam posisi, pastikan GPS aktif.", true)
             }
         } catch (e: SecurityException) {
-            speakOut("Izin lokasi diperlukan.")
+            speakOut("Izin lokasi diperlukan.", true)
         }
     }
 
@@ -568,12 +577,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             val location = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             if (location != null) {
-                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat dan koordinat lokasi terkini.")
+                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat dan koordinat lokasi terkini.", true)
             } else {
-                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat.")
+                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat.", true)
             }
         } catch (e: SecurityException) {
-            speakOut("Mode SOS diaktifkan. Gagal membaca koordinat GPS.")
+            speakOut("Mode SOS diaktifkan. Gagal membaca koordinat GPS.", true)
         }
     }
 
@@ -625,13 +634,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 if (isTrackingActive) checkPermissionAndStartContinuousTracking()
                 else requestSingleLocation()
             } else {
-                speakOut("Izin lokasi ditolak.")
+                speakOut("Izin lokasi ditolak.", true)
             }
         } else if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                speakOut("Izin kamera diberikan.")
+                speakOut("Izin kamera diberikan.", true)
             } else {
-                speakOut("Izin kamera ditolak.")
+                speakOut("Izin kamera ditolak.", true)
             }
         }
     }
