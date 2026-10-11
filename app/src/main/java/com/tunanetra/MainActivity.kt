@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
 
     private lateinit var tvStatus: TextView
     private lateinit var btnToggleTracking: Button
+    private lateinit var btnCameraObstacle: Button
     private var previewView: PreviewView? = null
 
     private var isTrackingActive: Boolean = false
@@ -168,12 +169,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnDestination)
 
-            val btnCameraObstacle = Button(this).apply {
-                text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
+            btnCameraObstacle = Button(this).apply {
+                text = "Aktifkan Deteksi Kamera"
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#EF6C00"))
                 setTextColor(Color.WHITE)
-                contentDescription = "Tombol Aktifkan Deteksi Kamera"
+                contentDescription = "Tombol Deteksi Kamera"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 150))
@@ -407,12 +408,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 LinearLayout.LayoutParams.MATCH_PARENT,
                                 450
                             ).apply { bottomMargin = 16 }
-                            contentDescription = "Pratinjau kamera pemindai jangkauan jauh"
+                            contentDescription = "Pratinjau kamera pemindai jarak"
                         }
                         container.addView(previewView, 2)
                     }
                     previewView?.visibility = View.VISIBLE
                     startCameraPreview()
+                    btnCameraObstacle.text = "Matikan Deteksi Kamera (STOP)"
+                    btnCameraObstacle.setBackgroundColor(Color.parseColor("#424242"))
                 }.onFailure {
                     isCameraActive = false
                     speakOut("Fitur kamera belum didukung di perangkat ini.")
@@ -421,6 +424,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         } else {
             previewView?.visibility = View.GONE
             stopCameraPreview()
+            btnCameraObstacle.text = "Aktifkan Deteksi Kamera"
+            btnCameraObstacle.setBackgroundColor(Color.parseColor("#EF6C00"))
             speakOut("Kamera pemindai dimatikan.")
         }
     }
@@ -436,6 +441,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
+                    // Kalibrasi jangkauan diperhalus agar tidak terlalu sensitif di jarak dekat
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -463,16 +469,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     val avgBrightness = if (count > 0) (sum / count) else 0L
                                     val contrast = maxVal - minVal
 
+                                    // Ambang batas kontras diperlebar agar objek 2-3 meter terbaca akurat
                                     val analysisText = when {
-                                        contrast > 160 -> "Awas! Rintangan besar atau dinding terdekat sekitar 0.5 meter di depan."
-                                        contrast in 70..160 -> "Perhatian: Objek atau rintangan terdeteksi sekitar 1 hingga 2 meter di depan."
-                                        contrast in 35..69 -> "Pemindaian jauh: Ada bentuk atau objek sekitar 2 hingga 3 meter di depan."
+                                        contrast > 210 -> "Awas! Rintangan sangat dekat sekitar 0.5 meter di depan."
+                                        contrast in 120..210 -> "Perhatian: Objek atau rintangan terdeteksi sekitar 1 hingga 2 meter di depan."
+                                        contrast in 60..119 -> "Pemindaian jauh: Ada objek atau dinding sekitar 2 hingga 3 meter di depan."
                                         avgBrightness < 30 -> "Peringatan: Area gelap gulita di depan Anda."
-                                        else -> "Jalur terbuka dan aman hingga 3 meter di depan Anda."
+                                        else -> "Jalur terbuka dan aman hingga 3 meter di depan."
                                     }
 
                                     val currentTime = System.currentTimeMillis()
-                                    if (currentTime - lastCameraSpeechTime > 3500) {
+                                    if (currentTime - lastCameraSpeechTime > 4000) {
                                         lastCameraSpeechTime = currentTime
                                         runOnUiThread {
                                             if (isCameraActive) {
@@ -498,7 +505,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Pemindai jangkauan jauh hingga 3 meter siap.")
+                    speakOut("Kamera aktif. Pemindai jangkauan 1 hingga 3 meter siap.")
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
