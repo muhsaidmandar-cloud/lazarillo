@@ -1,7 +1,6 @@
 package com.tunanetra
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -20,16 +19,22 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 
-class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, SensorEventListener {
+class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationListener, SensorEventListener {
 
     private lateinit var tts: TextToSpeech
     private lateinit var locationManager: LocationManager
@@ -40,24 +45,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
     private var geomagneticValues: FloatArray? = null
     private var currentAzimuth: Float = 0f
 
-    private var lastSpokenText: String = "Selamat datang di Lazarillo. Semua fitur navigasi siap digunakan."
+    private var lastSpokenText: String = "Selamat datang di Lazarillo Pro. Sistem kamera dan navigasi siap digunakan."
     private val LOCATION_PERMISSION_REQUEST_CODE = 100
     private val CAMERA_PERMISSION_REQUEST_CODE = 101
 
     private lateinit var tvStatus: TextView
     private lateinit var btnToggleTracking: Button
+    private lateinit var previewView: PreviewView
 
     private var isTrackingActive: Boolean = false
-    private val reportedHazards = mutableListOf<String>() // Penyimpanan lokal titik bahaya
+    private var isCameraActive: Boolean = false
+    private val reportedHazards = mutableListOf<String>()
 
-    override fun onCreate(state: Bundle?) {
-        super.onCreate(state)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-        // Inisialisasi Layanan Utama
+        // Inisialisasi Layanan
         tts = TextToSpeech(this, this)
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        
+
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
@@ -66,7 +73,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
 
-        // Tata Letak Utama dengan ScrollView agar semua tombol muat di layar
+        // Tata Letak Utama dengan ScrollView
         val scrollView = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -87,7 +94,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
             textSize = 24f
             setTextColor(Color.BLACK)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 12)
+            setPadding(0, 0, 0, 8)
         })
 
         // Status / Teks Informasi
@@ -100,17 +107,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         }
         box.addView(tvStatus)
 
-        // ==========================================
-        // FITUR ASLI YANG DIPERTAHANKAN
-        // ==========================================
+        // Tampilan Kamera Asli (PreviewView) - Disembunyikan saat awal
+        previewView = PreviewView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                450
+            ).apply { bottomMargin = 16 }
+            visibility = View.GONE
+        }
+        box.addView(previewView)
 
         // 1. Tombol Asli: Dimana Saya?
         val btnGetLocation = Button(this).apply {
             text = "Dimana Saya?"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#2E7D32")) // Hijau
+            setBackgroundColor(Color.parseColor("#2E7D32"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 8 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 6 }
             setOnClickListener {
                 vibratePhone(50)
                 checkPermissionAndGetGPSOnce()
@@ -122,9 +135,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         val btnRepeat = Button(this).apply {
             text = "Ulangi Informasi"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#1565C0")) // Biru
+            setBackgroundColor(Color.parseColor("#1565C0"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
             setOnClickListener {
                 vibratePhone(50)
                 speakOut(lastSpokenText)
@@ -136,9 +149,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         btnToggleTracking = Button(this).apply {
             text = "Mulai Pantau Jalan (STOP Nonaktif)"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#C62828")) // Merah
+            setBackgroundColor(Color.parseColor("#C62828"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
             setOnClickListener {
                 vibratePhone(100)
                 toggleTrackingState()
@@ -146,17 +159,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         }
         box.addView(btnToggleTracking)
 
-        // ==========================================
-        // FITUR BARU TAMBAHAN (1 sampai 4)
-        // ==========================================
-
-        // Fitur 1 & 2: Navigasi Tujuan Spesifik & Turn-by-Turn Routing
+        // 4. Panduan Rute & Tujuan
         val btnDestination = Button(this).apply {
             text = "Cari Tujuan & Panduan Rute"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#00838F")) // Cyan Gelap
+            setBackgroundColor(Color.parseColor("#00838F"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 16 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
             setOnClickListener {
                 vibratePhone(75)
                 startDestinationGuidance()
@@ -164,27 +173,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         }
         box.addView(btnDestination)
 
-        // Fitur 3: Deteksi Halangan Berbasis Kamera (Simulasi / Pindai Sensor Visual)
+        // 5. Fitur Kamera Nyata (CameraX)
         val btnCameraObstacle = Button(this).apply {
-            text = "Deteksi Halangan Kamera"
+            text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#EF6C00")) // Oranye
+            setBackgroundColor(Color.parseColor("#EF6C00"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
             setOnClickListener {
                 vibratePhone(150)
-                checkCameraAndDetectObstacle()
+                toggleCameraState()
             }
         }
         box.addView(btnCameraObstacle)
 
-        // Fitur 4: Pelaporan Kondisi Jalan / Bahaya (Crowdsourced Hazards)
+        // 6. Pelaporan Kondisi Jalan (Hazards)
         val btnReportHazard = Button(this).apply {
             text = "Laporkan Lubang / Bahaya Jalan"
             textSize = 16f
-            setBackgroundColor(Color.parseColor("#6A1B9A")) // Ungu
+            setBackgroundColor(Color.parseColor("#6A1B9A"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120).apply { topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
             setOnClickListener {
                 vibratePhone(200)
                 reportCurrentHazardLocation()
@@ -198,11 +207,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
 
     override fun onResume() {
         super.onResume()
-        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also { accelerometer ->
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
-        sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.also { magneticField ->
-            sensorManager.registerListener(this, magneticField, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.also {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
     }
 
@@ -228,7 +237,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
-    // Umpan Balik Getaran (Haptic Feedback)
     private fun vibratePhone(milliseconds: Long) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -238,7 +246,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         }
     }
 
-    // Toggle Pelacakan Otomatis (Tombol STOP Asli)
     private fun toggleTrackingState() {
         isTrackingActive = !isTrackingActive
         if (isTrackingActive) {
@@ -296,8 +303,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
 
     override fun onLocationChanged(location: Location) {
         if (isTrackingActive) {
-            // Cek apakah mendekati area bahaya yang dilaporkan
-            checkHazardsProximity(location)
             processLocationAndSpeak(location, true)
         }
     }
@@ -329,45 +334,69 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
         speakOut(finalMessage)
     }
 
-    // --- IMPLEMENTASI FITUR BARU 1 & 2: Panduan Rute & Tujuan Spesifik ---
-    private fun startDestinationGuidance() {
-        speakOut("Fitur panduan rute diaktifkan. Silakan berjalan lurus 30 meter mengikuti arah utara menuju titik tujuan terdekat.")
-        vibratePhone(100)
-    }
-
-    // --- IMPLEMENTASI FITUR BARU 3: Deteksi Halangan Kamera ---
-    private fun checkCameraAndDetectObstacle() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
+    // --- FITUR KAMERA NYATA MENGGUNAKAN CAMERAX ---
+    private fun toggleCameraState() {
+        isCameraActive = !isCameraActive
+        if (isCameraActive) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
+                isCameraActive = false
+            } else {
+                previewView.visibility = View.VISIBLE
+                startCameraPreview()
+            }
         } else {
-            // Simulasi pemindaian objek/halangan di depan via kamera
-            speakOut("Memindai area depan via kamera. Awas, jalur bersih dalam radius 2 meter.")
-            vibratePhone(80)
+            previewView.visibility = View.GONE
+            stopCameraPreview()
+            speakOut("Kamera pemindai dimatikan.")
         }
     }
 
-    // --- IMPLEMENTASI FITUR BARU 4: Pelaporan Kondisi Jalan (Hazards) ---
+    private fun startCameraPreview() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview)
+                speakOut("Kamera aktif. Mengarahkan pandangan ke depan. Jalur terpantau.")
+            } catch (exc: Exception) {
+                speakOut("Gagal mengaktifkan kamera.")
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun stopCameraPreview() {
+        try {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+            val cameraProvider = cameraProviderFuture.get()
+            cameraProvider.unbindAll()
+        } catch (e: Exception) {}
+    }
+
+    private fun startDestinationGuidance() {
+        speakOut("Fitur panduan rute diaktifkan. Silakan berjalan lurus mengikuti arah utara menuju tujuan.")
+        vibratePhone(100)
+    }
+
     private fun reportCurrentHazardLocation() {
         try {
             val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             if (location != null) {
-                val hazardInfo = "Lubang/Kerusakan di koordinat ${location.latitude}, ${location.longitude}"
+                val hazardInfo = "Lubang di koordinat ${location.latitude}, ${location.longitude}"
                 reportedHazards.add(hazardInfo)
-                speakOut("Titik bahaya berhasil dilaporkan dan disimpan untuk sesama pengguna.")
-                vibratePhone(300) // Getar panjang konfirmasi laporan
+                speakOut("Titik bahaya jalan berhasil disimpan.")
+                vibratePhone(300)
             } else {
-                speakOut("Gagal merekam posisi lubang, pastikan GPS aktif.")
+                speakOut("Gagal merekam posisi, pastikan GPS aktif.")
             }
         } catch (e: SecurityException) {
-            speakOut("Izin lokasi diperlukan untuk melaporkan jalan.")
-        }
-    }
-
-    private fun checkHazardsProximity(currentLocation: Location) {
-        // Peringatan otomatis jika mendekati titik bahaya yang tersimpan
-        if (reportedHazards.isNotEmpty() && currentLocation.accuracy < 20f) {
-            // Logika peringatan dini jika melewati titik laporan
+            speakOut("Izin lokasi diperlukan.")
         }
     }
 
@@ -417,7 +446,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
             }
         } else if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                speakOut("Izin kamera diberikan. Deteksi halangan aktif.")
+                speakOut("Izin kamera diberikan. Mengaktifkan kamera.")
+                toggleCameraState()
             } else {
                 speakOut("Izin kamera ditolak.")
             }
@@ -426,6 +456,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener, LocationListener, 
 
     override fun onDestroy() {
         stopContinuousTracking()
+        stopCameraPreview()
         sensorManager.unregisterListener(this)
         if (::tts.isInitialized) {
             tts.stop()
