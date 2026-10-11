@@ -27,12 +27,16 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -408,7 +412,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 LinearLayout.LayoutParams.MATCH_PARENT,
                                 450
                             ).apply { bottomMargin = 16 }
-                            contentDescription = "Pratinjau kamera pemindai jarak"
+                            contentDescription = "Pratinjau kamera pendeteksi objek AI"
                         }
                         container.addView(previewView, 2)
                     }
@@ -430,8 +434,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         }
     }
 
+    @OptIn(ExperimentalGetImage::class)
     private fun startCameraPreview() {
         try {
+            val options = ObjectDetectorOptions.Builder()
+                .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
+                .enableClassification()
+                .build()
+            val objectDetector = ObjectDetection.getClient(options)
+
             val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
             cameraProviderFuture.addListener({
                 try {
@@ -441,56 +452,62 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Kalibrasi jangkauan diperhalus agar tidak terlalu sensitif di jarak dekat
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also { analysis ->
                             analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                                try {
-                                    val buffer = imageProxy.planes[0].buffer
-                                    val bytes = ByteArray(buffer.remaining())
-                                    buffer.get(bytes)
+                                val mediaImage = imageProxy.image
+                                if (mediaImage != null) {
+                                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                                    objectDetector.process(image)
+                                        .addOnSuccessListener { detectedObjects ->
+                                            var analysisText = "Jalur terbuka dan aman hingga 3 meter di depan."
+                                            
+                                            if (detectedObjects.isNotEmpty()) {
+                                                val obj = detectedObjects[0]
+                                                val box = obj.boundingBox
+                                                val boxArea = box.width() * box.height()
+                                                
+                                                val distanceText = when {
+                                                    boxArea > 150000 -> "sekitar 0.5 meter"
+                                                    boxArea > 60000 -> "sekitar 1 hingga 2 meter"
+                                                    else -> "sekitar 2 hingga 3 meter"
+                                                }
 
-                                    var sum = 0L
-                                    var minVal = 255
-                                    var maxVal = 0
-                                    val step = maxOf(1, bytes.size / 150)
-                                    var count = 0
-                                    
-                                    for (i in bytes.indices step step) {
-                                        val pixel = (bytes[i].toInt() and 0xFF)
-                                        sum += pixel
-                                        if (pixel < minVal) minVal = pixel
-                                        if (pixel > maxVal) maxVal = pixel
-                                        count++
-                                    }
-                                    
-                                    val avgBrightness = if (count > 0) (sum / count) else 0L
-                                    val contrast = maxVal - minVal
+                                                var categoryName = "Objek / Rintangan"
+                                                if (obj.labels.isNotEmpty()) {
+                                                    val labelText = obj.labels[0].text
+                                                    categoryName = when (labelText) {
+                                                        "Home goods" -> "Perabotan atau barang rumah tangga"
+                                                        "Fashion goods" -> "Pakaian atau aksesoris"
+                                                        "Food" -> "Makanan"
+                                                        "Place" -> "Struktur atau dinding"
+                                                        "Plant" -> "Tanaman"
+                                                        else -> "Objek"
+                                                    }
+                                                }
+                                                
+                                                analysisText = "Peringatan: $categoryName terdeteksi $distanceText di depan."
+                                            }
 
-                                    // Ambang batas kontras diperlebar agar objek 2-3 meter terbaca akurat
-                                    val analysisText = when {
-                                        contrast > 210 -> "Awas! Rintangan sangat dekat sekitar 0.5 meter di depan."
-                                        contrast in 120..210 -> "Perhatian: Objek atau rintangan terdeteksi sekitar 1 hingga 2 meter di depan."
-                                        contrast in 60..119 -> "Pemindaian jauh: Ada objek atau dinding sekitar 2 hingga 3 meter di depan."
-                                        avgBrightness < 30 -> "Peringatan: Area gelap gulita di depan Anda."
-                                        else -> "Jalur terbuka dan aman hingga 3 meter di depan."
-                                    }
-
-                                    val currentTime = System.currentTimeMillis()
-                                    if (currentTime - lastCameraSpeechTime > 4000) {
-                                        lastCameraSpeechTime = currentTime
-                                        runOnUiThread {
-                                            if (isCameraActive) {
-                                                tvStatus.text = analysisText
-                                                tvStatus.contentDescription = analysisText
-                                                tts?.speak(analysisText, TextToSpeech.QUEUE_ADD, null, null)
+                                            val currentTime = System.currentTimeMillis()
+                                            if (currentTime - lastCameraSpeechTime > 3500) {
+                                                lastCameraSpeechTime = currentTime
+                                                runOnUiThread {
+                                                    if (isCameraActive) {
+                                                        tvStatus.text = analysisText
+                                                        tvStatus.contentDescription = analysisText
+                                                        tts?.speak(analysisText, TextToSpeech.QUEUE_ADD, null, null)
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                } catch (e: Exception) {
-                                } finally {
+                                        .addOnFailureListener {}
+                                        .addOnCompleteListener {
+                                            imageProxy.close()
+                                        }
+                                } else {
                                     imageProxy.close()
                                 }
                             }
@@ -505,7 +522,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Pemindai jangkauan 1 hingga 3 meter siap.")
+                    speakOut("Kamera aktif. Deteksi objek AI siap membimbing.")
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
