@@ -45,13 +45,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private var geomagneticValues: FloatArray? = null
     private var currentAzimuth: Float = 0f
 
-    private var lastSpokenText: String = "Selamat datang di Lazarillo Pro. Sistem kamera dan navigasi siap digunakan."
+    private var lastSpokenText: String = "Selamat datang di Lazarillo Pro. Sistem siap digunakan."
     private val LOCATION_PERMISSION_REQUEST_CODE = 100
     private val CAMERA_PERMISSION_REQUEST_CODE = 101
 
     private lateinit var tvStatus: TextView
     private lateinit var btnToggleTracking: Button
-    private lateinit var previewView: PreviewView
+    private var previewView: PreviewView? = null
 
     private var isTrackingActive: Boolean = false
     private var isCameraActive: Boolean = false
@@ -60,149 +60,144 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inisialisasi Layanan
-        tts = TextToSpeech(this, this)
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        try {
+            // Inisialisasi Layanan dengan Aman
+            tts = TextToSpeech(this, this)
+            locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
-        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-
-        // Tata Letak Utama dengan ScrollView
-        val scrollView = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.WHITE)
-        }
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(32, 32, 32, 32)
-        }
-
-        // Judul Aplikasi
-        box.addView(TextView(this).apply {
-            text = "Lazarillo Navigasi Pro"
-            textSize = 24f
-            setTextColor(Color.BLACK)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 8)
-        })
-
-        // Status / Teks Informasi
-        tvStatus = TextView(this).apply {
-            text = "Sistem siap. Pilih menu panduan di bawah."
-            textSize = 14f
-            setTextColor(Color.DKGRAY)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 16)
-        }
-        box.addView(tvStatus)
-
-        // Tampilan Kamera Asli (PreviewView) - Disembunyikan saat awal
-        previewView = PreviewView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                450
-            ).apply { bottomMargin = 16 }
-            visibility = View.GONE
-        }
-        box.addView(previewView)
-
-        // 1. Tombol Asli: Dimana Saya?
-        val btnGetLocation = Button(this).apply {
-            text = "Dimana Saya?"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#2E7D32"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 6 }
-            setOnClickListener {
-                vibratePhone(50)
-                checkPermissionAndGetGPSOnce()
+            vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             }
-        }
-        box.addView(btnGetLocation)
 
-        // 2. Tombol Asli: Ulangi Informasi
-        val btnRepeat = Button(this).apply {
-            text = "Ulangi Informasi"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#1565C0"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
-            setOnClickListener {
-                vibratePhone(50)
-                speakOut(lastSpokenText)
+            // Tata Letak Utama dengan ScrollView
+            val scrollView = ScrollView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.WHITE)
             }
-        }
-        box.addView(btnRepeat)
 
-        // 3. Tombol Asli: STOP / Toggle Pelacakan Otomatis
-        btnToggleTracking = Button(this).apply {
-            text = "Mulai Pantau Jalan (STOP Nonaktif)"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#C62828"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
-            setOnClickListener {
-                vibratePhone(100)
-                toggleTrackingState()
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(32, 32, 32, 32)
             }
-        }
-        box.addView(btnToggleTracking)
 
-        // 4. Panduan Rute & Tujuan
-        val btnDestination = Button(this).apply {
-            text = "Cari Tujuan & Panduan Rute"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#00838F"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
-            setOnClickListener {
-                vibratePhone(75)
-                startDestinationGuidance()
+            // Judul Aplikasi
+            box.addView(TextView(this).apply {
+                text = "Lazarillo Navigasi Pro"
+                textSize = 24f
+                setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, 8)
+            })
+
+            // Status / Teks Informasi
+            tvStatus = TextView(this).apply {
+                text = "Sistem siap. Pilih menu panduan di bawah."
+                textSize = 14f
+                setTextColor(Color.DKGRAY)
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, 16)
             }
-        }
-        box.addView(btnDestination)
+            box.addView(tvStatus)
 
-        // 5. Fitur Kamera Nyata (CameraX)
-        val btnCameraObstacle = Button(this).apply {
-            text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#EF6C00"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
-            setOnClickListener {
-                vibratePhone(150)
-                toggleCameraState()
+            // 1. Tombol Asli: Dimana Saya?
+            val btnGetLocation = Button(this).apply {
+                text = "Dimana Saya?"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#2E7D32"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 6 }
+                setOnClickListener {
+                    vibratePhone(50)
+                    checkPermissionAndGetGPSOnce()
+                }
             }
-        }
-        box.addView(btnCameraObstacle)
+            box.addView(btnGetLocation)
 
-        // 6. Pelaporan Kondisi Jalan (Hazards)
-        val btnReportHazard = Button(this).apply {
-            text = "Laporkan Lubang / Bahaya Jalan"
-            textSize = 16f
-            setBackgroundColor(Color.parseColor("#6A1B9A"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
-            setOnClickListener {
-                vibratePhone(200)
-                reportCurrentHazardLocation()
+            // 2. Tombol Asli: Ulangi Informasi
+            val btnRepeat = Button(this).apply {
+                text = "Ulangi Informasi"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#1565C0"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePhone(50)
+                    speakOut(lastSpokenText)
+                }
             }
-        }
-        box.addView(btnReportHazard)
+            box.addView(btnRepeat)
 
-        scrollView.addView(box)
-        setContentView(scrollView)
+            // 3. Tombol Asli: STOP / Toggle Pelacakan Otomatis
+            btnToggleTracking = Button(this).apply {
+                text = "Mulai Pantau Jalan (STOP Nonaktif)"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#C62828"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePhone(100)
+                    toggleTrackingState()
+                }
+            }
+            box.addView(btnToggleTracking)
+
+            // 4. Panduan Rute & Tujuan
+            val btnDestination = Button(this).apply {
+                text = "Cari Tujuan & Panduan Rute"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#00838F"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePhone(75)
+                    startDestinationGuidance()
+                }
+            }
+            box.addView(btnDestination)
+
+            // 5. Tombol Fitur Kamera Nyata
+            val btnCameraObstacle = Button(this).apply {
+                text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#EF6C00"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePhone(150)
+                    toggleCameraState(box)
+                }
+            }
+            box.addView(btnCameraObstacle)
+
+            // 6. Pelaporan Kondisi Jalan (Hazards)
+            val btnReportHazard = Button(this).apply {
+                text = "Laporkan Lubang / Bahaya Jalan"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#6A1B9A"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePhone(200)
+                    reportCurrentHazardLocation()
+                }
+            }
+            box.addView(btnReportHazard)
+
+            scrollView.addView(box)
+            setContentView(scrollView)
+
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error saat memuat aplikasi: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {
@@ -334,19 +329,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         speakOut(finalMessage)
     }
 
-    // --- FITUR KAMERA NYATA MENGGUNAKAN CAMERAX ---
-    private fun toggleCameraState() {
+    // --- KAMERA DIINISIALISASI DINAMIS SAAT TOMBOL DITEKAN ---
+    private fun toggleCameraState(container: LinearLayout) {
         isCameraActive = !isCameraActive
         if (isCameraActive) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
                 isCameraActive = false
             } else {
-                previewView.visibility = View.VISIBLE
+                if (previewView == null) {
+                    previewView = PreviewView(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            450
+                        ).apply { bottomMargin = 16 }
+                    }
+                    container.addView(previewView, 2) // Masukkan di bawah teks status
+                }
+                previewView?.visibility = View.VISIBLE
                 startCameraPreview()
             }
         } else {
-            previewView.visibility = View.GONE
+            previewView?.visibility = View.GONE
             stopCameraPreview()
             speakOut("Kamera pemindai dimatikan.")
         }
@@ -355,15 +359,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private fun startCameraPreview() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
             try {
+                val cameraProvider = cameraProviderFuture.get()
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView?.surfaceProvider)
+                }
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview)
-                speakOut("Kamera aktif. Mengarahkan pandangan ke depan. Jalur terpantau.")
+                speakOut("Kamera aktif. Mengarahkan pandangan ke depan.")
             } catch (exc: Exception) {
                 speakOut("Gagal mengaktifkan kamera.")
             }
@@ -446,8 +450,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
         } else if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                speakOut("Izin kamera diberikan. Mengaktifkan kamera.")
-                toggleCameraState()
+                speakOut("Izin kamera diberikan.")
             } else {
                 speakOut("Izin kamera ditolak.")
             }
