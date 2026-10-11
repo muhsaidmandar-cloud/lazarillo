@@ -60,9 +60,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private val reportedHazards = mutableListOf<String>()
     private val savedWaypoints = mutableListOf<String>()
     private val cameraExecutor = Executors.newSingleThreadExecutor()
-    
-    // Variabel pengaman agar analisis background tidak terlalu sering bicara
-    private var lastAnalysisSpeechTime: Long = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -425,7 +422,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Analisis bingkai kamera latar belakang (Mendeteksi tingkat cahaya / objek visual)
+                    // Analisis kamera real-time tanpa batasan waktu & ambang batas disesuaikan
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -436,7 +433,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     val bytes = ByteArray(buffer.remaining())
                                     buffer.get(bytes)
 
-                                    // Hitung rata-rata kecerahan piksel frame kamera
                                     var sum = 0L
                                     val step = maxOf(1, bytes.size / 50)
                                     var count = 0
@@ -446,13 +442,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     }
                                     val avgBrightness = if (count > 0) (sum / count) else 0L
 
-                                    // Memberi jeda minimal 7 detik agar suara analisis tidak bertumpuk
-                                    val currentTime = System.currentTimeMillis()
-                                    if (avgBrightness < 35 && (currentTime - lastAnalysisSpeechTime > 7000)) {
-                                        lastAnalysisSpeechTime = currentTime
-                                        // Contoh pemberitahuan otomatis jika area terlalu gelap / terhalang
-                                        runOnUiThread {
-                                            speakOut("Peringatan: Area di depan terlihat sangat gelap.")
+                                    // Kalibrasi ulang batas terang/gelap yang jauh lebih akurat & responsif
+                                    val statusText = when {
+                                        avgBrightness > 100 -> "Area terang di depan."
+                                        avgBrightness > 45 -> "Pencahayaan cukup di depan."
+                                        else -> "Peringatan: Area di depan gelap."
+                                    }
+
+                                    // Menggunakan QUEUE_FLUSH agar langsung responsif menyebutkan kondisi terbaru secara kontinu
+                                    runOnUiThread {
+                                        if (isCameraActive) {
+                                            tvStatus.text = statusText
+                                            tts?.speak(statusText, TextToSpeech.QUEUE_FLUSH, null, null)
                                         }
                                     }
                                 } catch (e: Exception) {
@@ -471,8 +472,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Sistem pemindai dan analisis objek mulai berjalan.")
-                    vibratePattern(longArrayOf(0, 100, 100, 100))
+                    speakOut("Kamera aktif. Pemindai objek siap.")
+                    vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
                 }
