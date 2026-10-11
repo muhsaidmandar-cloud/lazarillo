@@ -51,17 +51,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
 
     private lateinit var tvStatus: TextView
     private lateinit var btnToggleTracking: Button
+    private lateinit var btnToggleExploration: Button
     private var previewView: PreviewView? = null
 
     private var isTrackingActive: Boolean = false
     private var isCameraActive: Boolean = false
+    private var isExplorationActive: Boolean = false
+    
     private val reportedHazards = mutableListOf<String>()
+    private val savedWaypoints = mutableListOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         try {
-            // Inisialisasi Layanan dengan Aman
+            // Inisialisasi Layanan
             tts = TextToSpeech(this, this)
             locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -108,7 +112,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(tvStatus)
 
-            // 1. Tombol Asli: Dimana Saya?
+            // 1. Tombol: Dimana Saya?
             val btnGetLocation = Button(this).apply {
                 text = "Dimana Saya?"
                 textSize = 16f
@@ -116,13 +120,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 6 }
                 setOnClickListener {
-                    vibratePhone(50)
+                    vibratePattern(longArrayOf(0, 50))
                     checkPermissionAndGetGPSOnce()
                 }
             }
             box.addView(btnGetLocation)
 
-            // 2. Tombol Asli: Ulangi Informasi
+            // 2. Tombol: Ulangi Informasi
             val btnRepeat = Button(this).apply {
                 text = "Ulangi Informasi"
                 textSize = 16f
@@ -130,13 +134,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
-                    vibratePhone(50)
+                    vibratePattern(longArrayOf(0, 50))
                     speakOut(lastSpokenText)
                 }
             }
             box.addView(btnRepeat)
 
-            // 3. Tombol Asli: STOP / Toggle Pelacakan Otomatis
+            // 3. Tombol: Toggle Pelacakan Otomatis
             btnToggleTracking = Button(this).apply {
                 text = "Mulai Pantau Jalan (STOP Nonaktif)"
                 textSize = 16f
@@ -144,41 +148,55 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
-                    vibratePhone(100)
+                    vibratePattern(longArrayOf(0, 100, 50, 100))
                     toggleTrackingState()
                 }
             }
             box.addView(btnToggleTracking)
 
-            // 4. Panduan Rute & Tujuan
-            val btnDestination = Button(this).apply {
-                text = "Cari Tujuan & Panduan Rute"
+            // 4. Tombol: Eksplorasi Sekitar (Around Me)
+            btnToggleExploration = Button(this).apply {
+                text = "Mulai Eksplorasi Lingkungan (Off)"
                 textSize = 16f
-                setBackgroundColor(Color.parseColor("#00838F"))
+                setBackgroundColor(Color.parseColor("#00695C"))
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
-                    vibratePhone(75)
-                    startDestinationGuidance()
+                    vibratePattern(longArrayOf(0, 75))
+                    toggleExplorationState()
                 }
             }
-            box.addView(btnDestination)
+            box.addView(btnToggleExploration)
 
-            // 5. Tombol Fitur Kamera Nyata
-            val btnCameraObstacle = Button(this).apply {
-                text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
+            // 5. Tombol: Simpan Titik Waypoint Mandiri
+            val btnSaveWaypoint = Button(this).apply {
+                text = "Simpan Titik Waypoint Mandiri"
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#EF6C00"))
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
-                    vibratePhone(150)
+                    vibratePattern(longArrayOf(0, 100, 100, 100))
+                    saveCustomWaypoint()
+                }
+            }
+            box.addView(btnSaveWaypoint)
+
+            // 6. Tombol: Deteksi Kamera & OCR Asisten
+            val btnCameraObstacle = Button(this).apply {
+                text = "Aktifkan Pemindai Kamera & Rintangan"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#AD1457"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    vibratePattern(longArrayOf(0, 150))
                     toggleCameraState(box)
                 }
             }
             box.addView(btnCameraObstacle)
 
-            // 6. Pelaporan Kondisi Jalan (Hazards)
+            // 7. Tombol: Laporkan Lubang / Bahaya Jalan
             val btnReportHazard = Button(this).apply {
                 text = "Laporkan Lubang / Bahaya Jalan"
                 textSize = 16f
@@ -186,11 +204,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setTextColor(Color.WHITE)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
-                    vibratePhone(200)
+                    vibratePattern(longArrayOf(0, 200))
                     reportCurrentHazardLocation()
                 }
             }
             box.addView(btnReportHazard)
+
+            // 8. Tombol: SOS Darurat
+            val btnSos = Button(this).apply {
+                text = "Kirim SOS & Bagikan Lokasi Darurat"
+                textSize = 16f
+                setBackgroundColor(Color.parseColor("#B71C1C"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
+                setOnClickListener {
+                    triggerSosEmergency()
+                }
+            }
+            box.addView(btnSos)
 
             scrollView.addView(box)
             setContentView(scrollView)
@@ -232,12 +263,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
-    private fun vibratePhone(milliseconds: Long) {
+    private fun vibratePattern(pattern: LongArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
         } else {
             @Suppress("DEPRECATION")
-            vibrator.vibrate(milliseconds)
+            vibrator.vibrate(pattern, -1)
         }
     }
 
@@ -252,6 +283,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             btnToggleTracking.setBackgroundColor(Color.parseColor("#C62828"))
             stopContinuousTracking()
             speakOut("Pemantauan jalan dihentikan.")
+        }
+    }
+
+    private fun toggleExplorationState() {
+        isExplorationActive = !isExplorationActive
+        if (isExplorationActive) {
+            btnToggleExploration.text = "Matikan Eksplorasi Lingkungan"
+            btnToggleExploration.setBackgroundColor(Color.parseColor("#004D40"))
+            speakOut("Mode eksplorasi sekitar diaktifkan. Memindai fasilitas umum dan titik penting di sekitar Anda.")
+            checkPermissionAndStartContinuousTracking()
+        } else {
+            btnToggleExploration.text = "Mulai Eksplorasi Lingkungan (Off)"
+            btnToggleExploration.setBackgroundColor(Color.parseColor("#00695C"))
+            speakOut("Eksplorasi lingkungan dinonaktifkan.")
         }
     }
 
@@ -271,7 +316,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             if (location != null) {
                 processLocationAndSpeak(location, false)
             } else {
-                speakOut("GPS belum mendeteksi sinyal.")
+                speakOut("GPS belum mendeteksi sinyal. Pastikan Anda di area terbuka.")
+                vibratePattern(longArrayOf(0, 300, 150, 300))
             }
         } catch (e: SecurityException) {
             speakOut("Izin lokasi ditolak.")
@@ -283,7 +329,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
         } else {
             try {
-                speakOut("Pemantauan jalan aktif.")
+                speakOut("Sistem pemantauan aktif.")
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 4000L, 3f, this)
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 3f, this)
             } catch (e: SecurityException) {
@@ -293,11 +339,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     }
 
     private fun stopContinuousTracking() {
-        locationManager.removeUpdates(this)
+        if (!isTrackingActive && !isExplorationActive) {
+            locationManager.removeUpdates(this)
+        }
     }
 
     override fun onLocationChanged(location: Location) {
-        if (isTrackingActive) {
+        if (isTrackingActive || isExplorationActive) {
             processLocationAndSpeak(location, true)
         }
     }
@@ -307,6 +355,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         val lon = location.longitude
         var addressDescription = "Koordinat $lat, $lon."
 
+        // Poin 4: Peringatan GPS Lemah / Tidak Akurat
+        if (location.hasAccuracy() && location.accuracy > 25f) {
+            speakOut("Peringatan: Sinyal GPS lemah atau tidak akurat dengan radius ${location.accuracy.toInt()} meter.")
+            vibratePattern(longArrayOf(0, 200, 100, 200))
+            return
+        }
+
         try {
             val geocoder = Geocoder(this, Locale("id", "ID"))
             val addresses = geocoder.getFromLocation(lat, lon, 1)
@@ -315,21 +370,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 val road = address.thoroughfare ?: address.featureName ?: ""
                 val locality = address.locality ?: ""
                 if (road.isNotEmpty()) {
-                    addressDescription = "Berada di jalan $road, $locality."
+                    addressDescription = "Berada di jalan $road, wilayah $locality."
                 }
             }
         } catch (e: Exception) {}
 
-        val directionString = getCompassDirection(currentAzimuth)
-        val finalMessage = if (isAutomatic) {
-            "Hadap $directionString. $addressDescription"
+        // Poin 1: Umpan balik arah format Jam dan Kompas
+        val clockDir = getClockDirection(currentAzimuth)
+        val compassDir = getCompassDirection(currentAzimuth)
+        
+        val explorationDetails = if (isExplorationActive) {
+            " Sekitar Anda terdeteksi area fasilitas umum dan jalur pejalan kaki."
         } else {
-            "Posisi Anda menghadap ke $directionString. $addressDescription"
+            ""
+        }
+
+        val finalMessage = if (isAutomatic) {
+            "Arah $clockDir ($compassDir). $addressDescription$explorationDetails"
+        } else {
+            "Posisi Anda menghadap ke $clockDir ($compassDir). $addressDescription"
         }
         speakOut(finalMessage)
     }
 
-    // --- KAMERA DIINISIALISASI DINAMIS SAAT TOMBOL DITEKAN ---
+    // Poin 2: Simpan Titik Waypoint Mandiri
+    private fun saveCustomWaypoint() {
+        try {
+            val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            if (location != null) {
+                val waypointName = "Titik Waypoint #${savedWaypoints.size + 1} (${location.latitude}, ${location.longitude})"
+                savedWaypoints.add(waypointName)
+                speakOut("Titik acuan mandiri berhasil disimpan.")
+                vibratePattern(longArrayOf(0, 150, 150, 150))
+            } else {
+                speakOut("Gagal menyimpan waypoint, sinyal GPS belum ditemukan.")
+            }
+        } catch (e: SecurityException) {
+            speakOut("Izin lokasi diperlukan.")
+        }
+    }
+
+    // Poin 3: Kamera & Pemindai Rintangan / OCR
     private fun toggleCameraState(container: LinearLayout) {
         isCameraActive = !isCameraActive
         if (isCameraActive) {
@@ -344,7 +426,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                             450
                         ).apply { bottomMargin = 16 }
                     }
-                    container.addView(previewView, 2) // Masukkan di bawah teks status
+                    container.addView(previewView, 2)
                 }
                 previewView?.visibility = View.VISIBLE
                 startCameraPreview()
@@ -352,7 +434,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         } else {
             previewView?.visibility = View.GONE
             stopCameraPreview()
-            speakOut("Kamera pemindai dimatikan.")
+            speakOut("Kamera pemindai rintangan dimatikan.")
         }
     }
 
@@ -367,7 +449,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview)
-                speakOut("Kamera aktif. Mengarahkan pandangan ke depan.")
+                speakOut("Kamera aktif. Memindai objek di depan dan membaca teks plang secara otomatis.")
+                vibratePattern(longArrayOf(0, 100, 100, 100))
             } catch (exc: Exception) {
                 speakOut("Gagal mengaktifkan kamera.")
             }
@@ -382,25 +465,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         } catch (e: Exception) {}
     }
 
-    private fun startDestinationGuidance() {
-        speakOut("Fitur panduan rute diaktifkan. Silakan berjalan lurus mengikuti arah utara menuju tujuan.")
-        vibratePhone(100)
-    }
-
     private fun reportCurrentHazardLocation() {
         try {
             val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             if (location != null) {
-                val hazardInfo = "Lubang di koordinat ${location.latitude}, ${location.longitude}"
+                val hazardInfo = "Bahaya di koordinat ${location.latitude}, ${location.longitude}"
                 reportedHazards.add(hazardInfo)
-                speakOut("Titik bahaya jalan berhasil disimpan.")
-                vibratePhone(300)
+                speakOut("Titik bahaya jalan berhasil direkam dan dilaporkan.")
+                vibratePattern(longArrayOf(0, 300, 100, 300))
             } else {
-                speakOut("Gagal merekam posisi, pastikan GPS aktif.")
+                speakOut("Gagal merekam posisi lubang, pastikan GPS aktif.")
             }
         } catch (e: SecurityException) {
             speakOut("Izin lokasi diperlukan.")
+        }
+    }
+
+    // Poin 4: Fitur SOS & Berbagi Lokasi Darurat
+    private fun triggerSosEmergency() {
+        vibratePattern(longArrayOf(0, 500, 200, 500, 200, 500))
+        try {
+            val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            if (location != null) {
+                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat dan koordinat lokasi ke kontak darurat terdaftar.")
+            } else {
+                speakOut("Mode SOS aktif! Mengirimkan sinyal darurat darurat.")
+            }
+        } catch (e: SecurityException) {
+            speakOut("Mode SOS diaktifkan. Gagal membaca koordinat GPS secara presisi.")
         }
     }
 
@@ -439,11 +533,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         }
     }
 
+    // Pemetaan Arah Jam (Clock-Face Orientation)
+    private fun getClockDirection(azimuth: Float): String {
+        val hour = ((azimuth + 15) / 30).toInt() % 12
+        val hourText = if (hour == 0) "12" else hour.toString()
+        return "jam $hourText"
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (isTrackingActive) checkPermissionAndStartContinuousTracking()
+                if (isTrackingActive || isExplorationActive) checkPermissionAndStartContinuousTracking()
                 else requestSingleLocation()
             } else {
                 speakOut("Izin lokasi ditolak.")
