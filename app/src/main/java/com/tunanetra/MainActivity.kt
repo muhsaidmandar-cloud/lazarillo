@@ -440,7 +440,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private fun startCameraPreview() {
         try {
             val options = ImageLabelerOptions.Builder()
-                .setConfidenceThreshold(0.60f) // Sedikit diturunkan agar lebih sensitif menangkap objek sekitar
+                .setConfidenceThreshold(0.60f)
                 .build()
             val imageLabeler = ImageLabeling.getClient(options)
 
@@ -453,7 +453,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Mengoptimalkan ImageAnalysis dengan resolusi target 640x480 untuk performa maksimal & anti-lag
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setTargetResolution(Size(640, 480))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -474,14 +473,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                             }
 
                                             val currentTime = System.currentTimeMillis()
-                                            // Interval jeda suara dipercepat menjadi 2.5 detik agar interaktif
                                             if (currentTime - lastCameraSpeechTime > 2500) {
                                                 lastCameraSpeechTime = currentTime
                                                 runOnUiThread {
                                                     if (isCameraActive) {
                                                         tvStatus.text = analysisText
                                                         tvStatus.contentDescription = analysisText
-                                                        // Menggunakan QUEUE_FLUSH agar suara objek saat ini langsung diucapkan (real-time)
                                                         tts?.speak(analysisText, TextToSpeech.QUEUE_FLUSH, null, null)
                                                     }
                                                 }
