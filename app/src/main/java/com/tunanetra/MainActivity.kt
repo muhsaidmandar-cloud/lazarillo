@@ -407,7 +407,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 LinearLayout.LayoutParams.MATCH_PARENT,
                                 450
                             ).apply { bottomMargin = 16 }
-                            contentDescription = "Pratinjau kamera pemindai jarak jauh"
+                            contentDescription = "Pratinjau kamera pemindai jangkauan jauh"
                         }
                         container.addView(previewView, 2)
                     }
@@ -436,7 +436,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Kalibrasi jangkauan diperluas hingga 1 - 3 meter
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -464,7 +463,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     val avgBrightness = if (count > 0) (sum / count) else 0L
                                     val contrast = maxVal - minVal
 
-                                    // Ambang batas disesuaikan agar mampu menjangkau objek 1 - 3 meter di depan
                                     val analysisText = when {
                                         contrast > 160 -> "Awas! Rintangan besar atau dinding terdekat sekitar 0.5 meter di depan."
                                         contrast in 70..160 -> "Perhatian: Objek atau rintangan terdeteksi sekitar 1 hingga 2 meter di depan."
@@ -615,7 +613,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         }
     }
 
-    override onDestroy() {
+    override fun onDestroy() {
         stopContinuousTracking()
         stopCameraPreview()
         cameraExecutor.shutdown()
