@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         super.onCreate(savedInstanceState)
 
         try {
-            // Inisialisasi Layanan dengan Aman (Mencegah Crash jika Layanan Absen)
+            // Inisialisasi Layanan dengan Aman
             tts = TextToSpeech(this, this)
             locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
@@ -224,7 +224,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             setContentView(scrollView)
 
         } catch (e: Exception) {
-            Toast.makeText(this, "Gagal memuat tampilan: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Error saat memuat aplikasi: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -249,7 +249,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         if (status == TextToSpeech.SUCCESS) {
             val result = tts?.setLanguage(Locale("id", "ID"))
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Toast.makeText(this, "Bahasa Indonesia tidak didukung di sistem TTS.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Bahasa Indonesia tidak didukung.", Toast.LENGTH_SHORT).show()
             } else {
                 speakOut(lastSpokenText)
             }
