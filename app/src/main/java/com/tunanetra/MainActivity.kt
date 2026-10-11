@@ -60,12 +60,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private val reportedHazards = mutableListOf<String>()
     private val savedWaypoints = mutableListOf<String>()
     private val cameraExecutor = Executors.newSingleThreadExecutor()
+    
+    // Variabel pengaman agar analisis background tidak terlalu sering bicara
+    private var lastAnalysisSpeechTime: Long = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         try {
-            // Inisialisasi Layanan dengan Aman
             tts = TextToSpeech(this, this)
             locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
@@ -78,7 +80,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             }
 
-            // Tata Letak Utama dengan ScrollView
             val scrollView = ScrollView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -93,7 +94,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setPadding(32, 32, 32, 32)
             }
 
-            // Judul Aplikasi
             box.addView(TextView(this).apply {
                 text = "Lazarillo Navigasi Pro"
                 textSize = 24f
@@ -102,7 +102,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 setPadding(0, 0, 0, 8)
             })
 
-            // Status / Teks Informasi
             tvStatus = TextView(this).apply {
                 text = "Sistem siap. Pilih menu panduan di bawah."
                 textSize = 14f
@@ -112,7 +111,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(tvStatus)
 
-            // 1. Tombol Asli: Dimana Saya?
             val btnGetLocation = Button(this).apply {
                 text = "Dimana Saya?"
                 textSize = 16f
@@ -126,7 +124,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnGetLocation)
 
-            // 2. Tombol Asli: Ulangi Informasi
             val btnRepeat = Button(this).apply {
                 text = "Ulangi Informasi"
                 textSize = 16f
@@ -140,7 +137,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnRepeat)
 
-            // 3. Tombol Asli: STOP / Toggle Pelacakan Otomatis
             btnToggleTracking = Button(this).apply {
                 text = "Mulai Pantau Jalan (STOP Nonaktif)"
                 textSize = 16f
@@ -154,7 +150,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnToggleTracking)
 
-            // 4. Tombol Asli: Panduan Rute & Tujuan
             val btnDestination = Button(this).apply {
                 text = "Cari Tujuan & Panduan Rute"
                 textSize = 16f
@@ -168,7 +163,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnDestination)
 
-            // 5. Tombol Asli: Fitur Kamera Nyata
             val btnCameraObstacle = Button(this).apply {
                 text = "Aktifkan Deteksi Kamera (Kamera Hidup/Mati)"
                 textSize = 16f
@@ -182,7 +176,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnCameraObstacle)
 
-            // 6. Tombol Asli: Pelaporan Kondisi Jalan (Hazards)
             val btnReportHazard = Button(this).apply {
                 text = "Laporkan Lubang / Bahaya Jalan"
                 textSize = 16f
@@ -196,7 +189,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnReportHazard)
 
-            // 7. Tombol Tambahan: Simpan Waypoint Mandiri
             val btnSaveWaypoint = Button(this).apply {
                 text = "Simpan Titik Waypoint Mandiri"
                 textSize = 16f
@@ -210,7 +202,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }
             box.addView(btnSaveWaypoint)
 
-            // 8. Tombol Tambahan: SOS Darurat
             val btnSos = Button(this).apply {
                 text = "Kirim SOS & Lokasi Darurat"
                 textSize = 16f
@@ -434,16 +425,37 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Penambahan ImageAnalysis untuk pemrosesan bingkai kamera secara real-time
+                    // Analisis bingkai kamera latar belakang (Mendeteksi tingkat cahaya / objek visual)
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also { analysis ->
                             analysis.setAnalyzer(cameraExecutor) { imageProxy ->
                                 try {
-                                    // Logika analisis bingkai kamera/objek berjalan di sini
+                                    val buffer = imageProxy.planes[0].buffer
+                                    val bytes = ByteArray(buffer.remaining())
+                                    buffer.get(bytes)
+
+                                    // Hitung rata-rata kecerahan piksel frame kamera
+                                    var sum = 0L
+                                    val step = maxOf(1, bytes.size / 50)
+                                    var count = 0
+                                    for (i in bytes.indices step step) {
+                                        sum += (bytes[i].toInt() and 0xFF)
+                                        count++
+                                    }
+                                    val avgBrightness = if (count > 0) (sum / count) else 0L
+
+                                    // Memberi jeda minimal 7 detik agar suara analisis tidak bertumpuk
+                                    val currentTime = System.currentTimeMillis()
+                                    if (avgBrightness < 35 && (currentTime - lastAnalysisSpeechTime > 7000)) {
+                                        lastAnalysisSpeechTime = currentTime
+                                        // Contoh pemberitahuan otomatis jika area terlalu gelap / terhalang
+                                        runOnUiThread {
+                                            speakOut("Peringatan: Area di depan terlihat sangat gelap.")
+                                        }
+                                    }
                                 } catch (e: Exception) {
-                                    // Tangani error frame jika ada
                                 } finally {
                                     imageProxy.close()
                                 }
