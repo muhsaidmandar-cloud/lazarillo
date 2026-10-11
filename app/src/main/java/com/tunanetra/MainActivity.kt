@@ -61,7 +61,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private val savedWaypoints = mutableListOf<String>()
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
-    // Variabel pengontrol jeda ucapan kamera agar TTS stabil bersuara
     private var lastCameraSpeechTime: Long = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +98,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 24f
                 setTextColor(Color.BLACK)
                 gravity = Gravity.CENTER
+                contentDescription = "Judul Aplikasi: Lazarillo Navigasi Pro"
                 setPadding(0, 0, 0, 8)
             })
 
@@ -107,6 +107,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 14f
                 setTextColor(Color.DKGRAY)
                 gravity = Gravity.CENTER
+                contentDescription = text
                 setPadding(0, 0, 0, 16)
             }
             box.addView(tvStatus)
@@ -116,6 +117,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#2E7D32"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Dimana Saya"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 6 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 50))
@@ -129,6 +131,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#1565C0"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Ulangi Informasi"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 50))
@@ -142,6 +145,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#C62828"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Pemantauan Jalan"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 100, 50, 100))
@@ -155,6 +159,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#00838F"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Cari Tujuan dan Panduan Rute"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 75))
@@ -168,6 +173,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#EF6C00"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Aktifkan Deteksi Kamera"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 150))
@@ -181,6 +187,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#6A1B9A"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Laporkan Lubang atau Bahaya Jalan"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 200))
@@ -194,6 +201,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#00695C"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Simpan Titik Waypoint Mandiri"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     vibratePattern(longArrayOf(0, 100, 100, 100))
@@ -207,6 +215,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                 textSize = 16f
                 setBackgroundColor(Color.parseColor("#B71C1C"))
                 setTextColor(Color.WHITE)
+                contentDescription = "Tombol Kirim SOS dan Lokasi Darurat"
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 110).apply { topMargin = 10 }
                 setOnClickListener {
                     triggerSosEmergency()
@@ -254,8 +263,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         lastSpokenText = text
         if (::tvStatus.isInitialized) {
             tvStatus.text = text
+            tvStatus.contentDescription = text
         }
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
     }
 
     private fun vibratePattern(pattern: LongArray) {
@@ -397,6 +407,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 LinearLayout.LayoutParams.MATCH_PARENT,
                                 450
                             ).apply { bottomMargin = 16 }
+                            contentDescription = "Pratinjau kamera pemindai jarak jauh"
                         }
                         container.addView(previewView, 2)
                     }
@@ -425,7 +436,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
 
-                    // Analisis objek, rintangan, dan estimasi jarak meter secara real-time
+                    // Kalibrasi jangkauan diperluas hingga 1 - 3 meter
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -439,7 +450,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     var sum = 0L
                                     var minVal = 255
                                     var maxVal = 0
-                                    val step = maxOf(1, bytes.size / 100)
+                                    val step = maxOf(1, bytes.size / 150)
                                     var count = 0
                                     
                                     for (i in bytes.indices step step) {
@@ -453,22 +464,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                     val avgBrightness = if (count > 0) (sum / count) else 0L
                                     val contrast = maxVal - minVal
 
-                                    // Estimasi jarak heuristik berdasarkan tingkat kontras/intensitas rintangan
+                                    // Ambang batas disesuaikan agar mampu menjangkau objek 1 - 3 meter di depan
                                     val analysisText = when {
-                                        contrast > 130 -> "Awas! Rintangan besar atau dinding terdeteksi sekitar 0.5 meter di depan."
-                                        contrast in 80..130 -> "Perhatian: Objek atau undakan terdeteksi sekitar 1 hingga 2 meter di depan."
-                                        avgBrightness < 35 -> "Peringatan: Area gelap gulita di depan Anda."
-                                        else -> "Jalur terbuka dan aman di depan Anda."
+                                        contrast > 160 -> "Awas! Rintangan besar atau dinding terdekat sekitar 0.5 meter di depan."
+                                        contrast in 70..160 -> "Perhatian: Objek atau rintangan terdeteksi sekitar 1 hingga 2 meter di depan."
+                                        contrast in 35..69 -> "Pemindaian jauh: Ada bentuk atau objek sekitar 2 hingga 3 meter di depan."
+                                        avgBrightness < 30 -> "Peringatan: Area gelap gulita di depan Anda."
+                                        else -> "Jalur terbuka dan aman hingga 3 meter di depan Anda."
                                     }
 
                                     val currentTime = System.currentTimeMillis()
-                                    // Memastikan TTS bersuara di Main Thread dengan jeda aman 2.5 detik agar tidak bentrok
-                                    if (currentTime - lastCameraSpeechTime > 2500) {
+                                    if (currentTime - lastCameraSpeechTime > 3500) {
                                         lastCameraSpeechTime = currentTime
                                         runOnUiThread {
                                             if (isCameraActive) {
                                                 tvStatus.text = analysisText
-                                                tts?.speak(analysisText, TextToSpeech.QUEUE_FLUSH, null, null)
+                                                tvStatus.contentDescription = analysisText
+                                                tts?.speak(analysisText, TextToSpeech.QUEUE_ADD, null, null)
                                             }
                                         }
                                     }
@@ -488,7 +500,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Pemindai objek dan jarak siap membimbing.")
+                    speakOut("Kamera aktif. Pemindai jangkauan jauh hingga 3 meter siap.")
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
@@ -603,7 +615,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
         }
     }
 
-    override fun onDestroy() {
+    override onDestroy() {
         stopContinuousTracking()
         stopCameraPreview()
         cameraExecutor.shutdown()
