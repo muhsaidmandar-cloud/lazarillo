@@ -35,8 +35,8 @@ import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.objects.ObjectDetection
-import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -412,7 +412,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 LinearLayout.LayoutParams.MATCH_PARENT,
                                 450
                             ).apply { bottomMargin = 16 }
-                            contentDescription = "Pratinjau kamera pendeteksi objek AI"
+                            contentDescription = "Pratinjau kamera pengenal objek"
                         }
                         container.addView(previewView, 2)
                     }
@@ -437,11 +437,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     @OptIn(ExperimentalGetImage::class)
     private fun startCameraPreview() {
         try {
-            val options = ObjectDetectorOptions.Builder()
-                .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
-                .enableClassification()
+            val options = ImageLabelerOptions.Builder()
+                .setConfidenceThreshold(0.65f)
                 .build()
-            val objectDetector = ObjectDetection.getClient(options)
+            val imageLabeler = ImageLabeling.getClient(options)
 
             val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
             cameraProviderFuture.addListener({
@@ -460,35 +459,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                                 val mediaImage = imageProxy.image
                                 if (mediaImage != null) {
                                     val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                                    objectDetector.process(image)
-                                        .addOnSuccessListener { detectedObjects ->
-                                            var analysisText = "Jalur terbuka dan aman hingga 3 meter di depan."
+                                    imageLabeler.process(image)
+                                        .addOnSuccessListener { labels ->
+                                            var analysisText = "Jalur terbuka dan aman di depan."
                                             
-                                            if (detectedObjects.isNotEmpty()) {
-                                                val obj = detectedObjects[0]
-                                                val box = obj.boundingBox
-                                                val boxArea = box.width() * box.height()
-                                                
-                                                val distanceText = when {
-                                                    boxArea > 150000 -> "sekitar 0.5 meter"
-                                                    boxArea > 60000 -> "sekitar 1 hingga 2 meter"
-                                                    else -> "sekitar 2 hingga 3 meter"
-                                                }
-
-                                                var categoryName = "Objek / Rintangan"
-                                                if (obj.labels.isNotEmpty()) {
-                                                    val labelText = obj.labels[0].text
-                                                    categoryName = when (labelText) {
-                                                        "Home goods" -> "Perabotan atau barang rumah tangga"
-                                                        "Fashion goods" -> "Pakaian atau aksesoris"
-                                                        "Food" -> "Makanan"
-                                                        "Place" -> "Struktur atau dinding"
-                                                        "Plant" -> "Tanaman"
-                                                        else -> "Objek"
-                                                    }
-                                                }
-                                                
-                                                analysisText = "Peringatan: $categoryName terdeteksi $distanceText di depan."
+                                            if (labels.isNotEmpty()) {
+                                                val topLabel = labels[0].text
+                                                val translatedName = translateLabelToIndonesian(topLabel)
+                                                analysisText = "Terdeteksi $translatedName di depan."
                                             }
 
                                             val currentTime = System.currentTimeMillis()
@@ -522,7 +500,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
                         imageAnalysis
                     )
                     
-                    speakOut("Kamera aktif. Deteksi objek AI siap membimbing.")
+                    speakOut("Kamera aktif. Pengenal nama objek siap.")
                     vibratePattern(longArrayOf(0, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
@@ -530,6 +508,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             }, ContextCompat.getMainExecutor(this))
         } catch (e: Exception) {
             speakOut("Kamera tidak dapat dijalankan.")
+        }
+    }
+
+    private fun translateLabelToIndonesian(englishLabel: String): String {
+        return when (englishLabel.lowercase(Locale.ROOT)) {
+            "fan", "electric fan" -> "kipas angin"
+            "chair" -> "kursi"
+            "table", "desk" -> "meja"
+            "door" -> "pintu"
+            "wall" -> "dinding"
+            "window" -> "jendela"
+            "floor" -> "lantai"
+            "stairs", "staircase" -> "tangga"
+            "person" -> "seseorang"
+            "bed" -> "tempat tidur"
+            "bottle" -> "botol"
+            "cup", "mug" -> "cangkir"
+            "book" -> "buku"
+            "laptop", "computer" -> "komputer atau laptop"
+            "cell phone", "smartphone" -> "ponsel"
+            else -> englishLabel
         }
     }
 
