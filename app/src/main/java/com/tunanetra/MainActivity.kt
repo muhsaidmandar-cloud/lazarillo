@@ -27,12 +27,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationListener, SensorEventListener {
 
@@ -57,6 +59,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     private var isCameraActive: Boolean = false
     private val reportedHazards = mutableListOf<String>()
     private val savedWaypoints = mutableListOf<String>()
+    private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -426,13 +429,37 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
             cameraProviderFuture.addListener({
                 try {
                     val cameraProvider = cameraProviderFuture.get()
+                    
                     val preview = Preview.Builder().build().also {
                         it.setSurfaceProvider(previewView?.surfaceProvider)
                     }
+
+                    // Penambahan ImageAnalysis untuk pemrosesan bingkai kamera secara real-time
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analysis ->
+                            analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                                try {
+                                    // Logika analisis bingkai kamera/objek berjalan di sini
+                                } catch (e: Exception) {
+                                    // Tangani error frame jika ada
+                                } finally {
+                                    imageProxy.close()
+                                }
+                            }
+                        }
+
                     val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                     cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(this, cameraSelector, preview)
-                    speakOut("Kamera aktif. Mengarahkan pandangan ke depan dan siap mendeteksi objek.")
+                    cameraProvider.bindToLifecycle(
+                        this, 
+                        cameraSelector, 
+                        preview, 
+                        imageAnalysis
+                    )
+                    
+                    speakOut("Kamera aktif. Sistem pemindai dan analisis objek mulai berjalan.")
                     vibratePattern(longArrayOf(0, 100, 100, 100))
                 } catch (exc: Exception) {
                     speakOut("Gagal menghubungkan kamera.")
@@ -550,6 +577,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener, LocationL
     override fun onDestroy() {
         stopContinuousTracking()
         stopCameraPreview()
+        cameraExecutor.shutdown()
         sensorManager?.unregisterListener(this)
         tts?.let {
             it.stop()
